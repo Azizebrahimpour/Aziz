@@ -155,7 +155,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"🌍 ترجمه آزمایشی:\n{text}\n\n(برای ترجمه دقیق، API گوگل ترنسلیت به نسخه سرور اضافه میشه)")
 
 # ---------- اجرا ----------
+# ---------- برای هاست مجانی Web Service ----------
+from flask import Flask
+import threading
+
+flask_app = Flask(__name__)
+
+@flask_app.route('/')
+def home():
+    return "🤖 ربات ایرانیان مقیم اتریش روشن است - @Iraniane_moghime_Otrish_bot"
+
+def run_flask():
+    import os
+    port = int(os.environ.get("PORT", 10000))
+    flask_app.run(host="0.0.0.0", port=port)
+
 def main():
+    # ترد وب سرور برای Render مجانی
+    threading.Thread(target=run_flask, daemon=True).start()
+    
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
