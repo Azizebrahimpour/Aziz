@@ -158,6 +158,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ---------- برای هاست مجانی Web Service ----------
 from flask import Flask
 import threading
+import asyncio
 
 flask_app = Flask(__name__)
 
@@ -171,7 +172,13 @@ def run_flask():
     flask_app.run(host="0.0.0.0", port=port)
 
 def main():
-    # ترد وب سرور برای Render مجانی
+    # حل مشکل event loop در Render
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
+    
+    # وب سرور برای Render مجانی
     threading.Thread(target=run_flask, daemon=True).start()
     
     app = Application.builder().token(TOKEN).build()
