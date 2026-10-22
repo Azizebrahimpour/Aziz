@@ -232,113 +232,127 @@ async def settings_cmd(update, context):
     if not await check_admin(update, context): await update.message.reply_text("فقط ادمین"); return
     await update.message.reply_text("⚙️ تنظیمات گروه v9:", reply_markup=group_settings_menu(update.effective_chat.id))
 
-# --- اخبار کامل با متن کامل + فارسی ---
+
+# --- اخبار کامل v10 ULTRA ROBUST ---
 def fetch_rss_titles(url, limit=2):
     try:
-        import feedparser
-        feed=feedparser.parse(url)
+        headers={"User-Agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"}
+        r=requests.get(url, timeout=12, headers=headers)
+        txt=r.text.replace("\n"," ").replace("\r"," ")
+        items=re.findall(r"<item>(.*?)</item>", txt, re.DOTALL)[:limit]
         clean=[]
-        for entry in feed.entries[:limit]:
-            title=entry.get("title","").strip()[:200]
-            link=entry.get("link","").strip()
-            summary=entry.get("summary","") or entry.get("description","")
-            if len(title)<10: continue
-            clean.append((title, link, summary))
-        if clean: return clean
-    except Exception as e: print(f"feedparser err {e}")
-    try:
-        r=requests.get(url, timeout=8, headers={"User-Agent":"Mozilla/5.0"})
-        titles=re.findall(r"<title>(.*?)</title>", r.text, re.DOTALL)
-        links=re.findall(r"<link>(.*?)</link>", r.text, re.DOTALL)
-        clean=[]
-        for i in range(1, min(limit+1, len(titles))):
-            t=re.sub(r"<.*?>","",titles[i]).replace("<![CDATA[","").replace("]]>","").replace("&quot;","\"").replace("&amp;","&").replace("*","").strip()
-            if len(t)<10: continue
-            link=""
-            if i < len(links): link=re.sub(r"<.*?>","",links[i]).strip().replace("<![CDATA[","").replace("]]>","").strip()
-            clean.append((t[:200], link, ""))
+        for item in items:
+            tm=re.search(r"<title>(.*?)</title>", item, re.DOTALL)
+            lm=re.search(r"<link>(.*?)</link>", item, re.DOTALL)
+            dm=re.search(r"<description>(.*?)</description>", item, re.DOTALL)
+            if tm:
+                title=re.sub(r"<.*?>","",tm.group(1)).replace("<![CDATA[","").replace("]]>","").replace("&quot;","\"").replace("&amp;","&").replace("&apos;","'").strip()[:200]
+                link=re.sub(r"<.*?>","",lm.group(1)).strip().replace("<![CDATA[","").replace("]]>","").strip() if lm else ""
+                desc=re.sub(r"<.*?>","",dm.group(1)).strip()[:500] if dm else ""
+                if len(title)>10:
+                    clean.append((title, link, desc))
+        if clean:
+            return clean
+        titles=re.findall(r"<title>(.*?)</title>", txt, re.DOTALL)[1:limit+1]
+        links=re.findall(r"<link>(.*?)</link>", txt, re.DOTALL)[1:limit+1]
+        for i, t in enumerate(titles):
+            tt=re.sub(r"<.*?>","",t).replace("<![CDATA[","").replace("]]>","").strip()[:200]
+            ll=re.sub(r"<.*?>","",links[i]).strip() if i < len(links) else ""
+            if len(tt)>10:
+                clean.append((tt, ll, ""))
         return clean
     except Exception as e:
-        print(f"rss err {url} {e}"); return []
+        print(f"RSS ERR {url} {e}")
+        return []
 
 def fetch_article_text(url, max_chars=900):
+    if not url: return ""
     try:
-        headers={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        r=requests.get(url, timeout=12, headers=headers)
+        headers={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0"}
+        r=requests.get(url, timeout=15, headers=headers)
         html=r.text
-        if "orf.at" in url:
-            m=re.findall(r'<p[^>]*>(.*?)</p>', html, re.DOTALL)
-            texts=[]
-            for p in m[:10]:
-                t=re.sub(r"<.*?>","",p).strip().replace("&nbsp;"," ").replace("&quot;","\"").replace("&amp;","&").replace("&#39;","'").replace("&apos;","'")
-                if len(t)>50 and len(t)<800 and "Teilen" not in t and "Online seit" not in t:
-                    texts.append(t)
-            if texts: return " ".join(texts)[:max_chars]
-        if "bbc.com" in url or "bbc.co.uk" in url:
-            m=re.findall(r'<p[^>]*>(.*?)</p>', html, re.DOTALL)
-            texts=[]
-            for p in m[:10]:
-                t=re.sub(r"<.*?>","",p).strip()
-                if len(t)>40 and "BBC" not in t[:20]:
-                    texts.append(t)
-            if texts: return " ".join(texts)[:max_chars]
-        m=re.findall(r'<p[^>]*>(.*?)</p>', html, re.DOTALL)
+        html=re.sub(r"<script.*?</script>", "", html, flags=re.DOTALL)
+        html=re.sub(r"<style.*?</style>", "", html, flags=re.DOTALL)
+        paras=re.findall(r'<p[^>]*>(.*?)</p>', html, re.DOTALL)
         texts=[]
-        for p in m[:10]:
+        for p in paras[:12]:
             t=re.sub(r"<.*?>","",p).strip()
-            if len(t)>60 and len(t)<700: texts.append(t)
-        if texts: return " ".join(texts)[:max_chars]
-    except Exception as e: print(f"article err {url} {e}")
+            t=t.replace("&nbsp;"," ").replace("&quot;","\"").replace("&amp;","&").replace("&#39;","'").replace("&apos;","'")
+            if len(t)<50: continue
+            if len(t)>900: continue
+            if any(x in t for x in ["Teilen","Online seit","Newsletter","Copyright","Kommmentare"]): continue
+            texts.append(t)
+            if len(" ".join(texts))>max_chars: break
+        if texts:
+            full=" ".join(texts)[:max_chars]
+            full=re.sub(r"\s+", " ", full)
+            return full
+    except Exception as e:
+        print(f"ARTICLE ERR {url} {e}")
     return ""
 
 def translate_de_to_fa(text):
+    if not text: return None
     try:
-        if not text: return None
-        url=f"https://api.mymemory.translated.net/get?q={requests.utils.quote(text[:400])}&langpair=de|fa"
-        r=requests.get(url, timeout=8).json()
+        short=text[:350]
+        url=f"https://api.mymemory.translated.net/get?q={requests.utils.quote(short)}&langpair=de|fa"
+        r=requests.get(url, timeout=10).json()
         tr=r.get("responseData",{}).get("translatedText","")
-        if tr and len(tr)>10 and "MYMEMORY" not in tr: return tr
-        url2=f"https://api.mymemory.translated.net/get?q={requests.utils.quote(text[:400])}&langpair=en|fa"
-        r2=requests.get(url2, timeout=8).json()
-        return r2.get("responseData",{}).get("translatedText","")
-    except: return None
+        if tr and len(tr)>15 and "MYMEMORY" not in tr and "INVALID" not in tr:
+            return tr
+        url2=f"https://api.mymemory.translated.net/get?q={requests.utils.quote(short)}&langpair=en|fa"
+        r2=requests.get(url2, timeout=10).json()
+        tr2=r2.get("responseData",{}).get("translatedText","")
+        if tr2 and len(tr2)>15:
+            return tr2
+    except Exception as e:
+        print(f"trans err {e}")
+    return None
 
 def get_full_news_text():
     txt=f"📰 **اخبار کامل - {datetime.now().strftime('%H:%M %d/%m')}** 🇦🇹🇮🇷\n"
     txt+="━━━━━━━━━━━━━━━━━━━━\n\n"
-    # ORF
-    try:
-        orf=fetch_rss_titles("https://rss.orf.at/news.xml", limit=2)
-        if not orf: orf=fetch_rss_titles("https://rss.orf.at/orf.xml", limit=2)
-        if orf:
-            txt+="🇦🇹 **اتریش - ORF (رسمی):**\n\n"
-            for title, link, summary in orf:
-                full=fetch_article_text(link, max_chars=700) if link else ""
-                if not full: full=re.sub(r"<.*?>","",summary)[:600] if summary else ""
-                fa=translate_de_to_fa(full[:350]) if full and "orf.at" in link else None
-                txt+=f"**{title}**\n\n"
-                if full: txt+=f"{full}...\n\n"
-                if fa and fa!=full: txt+=f"🇮🇷 **فارسی:**\n{fa[:500]}...\n\n"
-                if link: txt+=f"🔗 {link}\n"
-                txt+="━━━━━━━━━━━━━━━━━━━━\n\n"
-    except Exception as e: print(f"ORF err {e}")
-    # BBC Persian
+    got=False
+    for rss_url in ["https://rss.orf.at/news.xml", "https://rss.orf.at/orf.xml"]:
+        try:
+            orf=fetch_rss_titles(rss_url, limit=2)
+            if orf:
+                txt+="🇦🇹 **اتریش - ORF:**\n\n"
+                for title, link, summary in orf:
+                    full=fetch_article_text(link, max_chars=750) if link else ""
+                    if not full: full=summary[:600]
+                    fa=translate_de_to_fa(full[:300]) if full and "orf.at" in link else None
+                    txt+=f"**{title}**\n\n"
+                    if full: txt+=f"{full[:700]}...\n\n"
+                    else: txt+=f"{summary[:500]}...\n\n" if summary else ""
+                    if fa and len(fa)>20: txt+=f"🇮🇷 **ترجمه:** {fa[:500]}...\n\n"
+                    if link: txt+=f"🔗 {link}\n"
+                    txt+="━━━━━━━━━━━━━━━━━━━━\n\n"
+                    got=True
+                break
+        except: continue
     try:
         bbc=fetch_rss_titles("https://feeds.bbci.co.uk/persian/rss.xml", limit=2)
         if bbc:
             txt+="🇮🇷 **ایران/جهان - BBC فارسی:**\n\n"
             for title, link, summary in bbc:
-                full=fetch_article_text(link, max_chars=700) if link else ""
-                if not full: full=re.sub(r"<.*?>","",summary)[:700] if summary else ""
+                full=fetch_article_text(link, max_chars=750) if link else ""
+                if not full: full=summary[:700]
                 txt+=f"**{title}**\n\n"
                 if full: txt+=f"{full[:700]}...\n\n"
                 if link: txt+=f"🔗 {link}\n"
                 txt+="━━━━━━━━━━━━━━━━━━━━\n\n"
-    except Exception as e: print(f"BBC err {e}")
+                got=True
+    except: pass
+    if not got:
+        txt+="🇦🇹 ORF: https://orf.at\n🇮🇷 BBC: https://www.bbc.com/persian\n\n"
+        txt+="سرویس اخبار موقتا در دسترس نیست، لطفا چند دقیقه بعد /news بزنید\n\n"
     txt+=f"🕐 {datetime.now().strftime('%H:%M')} وین | هر 4 ساعت بروز\n"
     txt+="📸 @Iraniane_moghime_Otrish_bot"
     if len(txt)>4000: txt=txt[:3900]+"\n..."
     return txt
+
+
 
 async def send_news(update_obj):
     try:
