@@ -1,7 +1,8 @@
 
 """
-PRO v5 GROUP MANAGER - FINAL FIXED v5.1
-@Iraniane_moghime_Otrish_bot - All buttons guaranteed to reply
+PRO v7 ULTIMATE - GROUP MANAGER + INSTA + AUTO NEWS EVERY 2H
+@Iraniane_moghime_Otrish_bot
+Features: welcome, anti-link, ban/kick/mute, silent, insta link, auto news 2h, real price, real news
 """
 
 import os, re, json, asyncio, threading, tempfile, requests
@@ -11,7 +12,6 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 from flask import Flask
 
 TOKEN = os.getenv("TOKEN")
-
 DATA_FILE = "/tmp/groups.json"
 GROUPS = {}
 try:
@@ -34,8 +34,17 @@ def get_group(chat_id):
             "anti_link": False,
             "anti_tag": False,
             "silent": {"enabled": False, "start": 23, "end": 7},
-            "welcome_text": "سلام {name} عزیز 👋 به گروه ایرانیان مقیم اتریش خوش اومدی 🇦🇹🇮🇷"
+            "welcome_text": "سلام {name} عزیز 👋 به گروه ایرانیان مقیم اتریش خوش اومدی 🇦🇹🇮🇷",
+            "insta_link": "",  # لینک اینستاگرام مدیر
+            "insta_text": "پیج اینستاگرام ما رو فالو کنید 👇",
+            "auto_news": False
         }
+        save_groups()
+    # backward compatibility
+    if "insta_link" not in GROUPS[cid]:
+        GROUPS[cid]["insta_link"] = ""
+        GROUPS[cid]["insta_text"] = "پیج اینستاگرام ما رو فالو کنید 👇"
+        GROUPS[cid]["auto_news"] = False
         save_groups()
     return GROUPS[cid]
 
@@ -50,19 +59,22 @@ async def check_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main_menu():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎵 پخش آهنگ", callback_data="music"), InlineKeyboardButton("📰 اخبار", callback_data="news")],
-        [InlineKeyboardButton("💶 قیمت ارز و طلا", callback_data="price"), InlineKeyboardButton("🌤️ هوای وین", callback_data="weather")],
-        [InlineKeyboardButton("🌍 مترجم", callback_data="translate"), InlineKeyboardButton("🏠 راهنمای اتریش", callback_data="guide")],
-        [InlineKeyboardButton("⚙️ تنظیمات گروه", callback_data="group_settings")],
+        [InlineKeyboardButton("🎵 پخش آهنگ", callback_data="music"), InlineKeyboardButton("📰 اخبار کامل", callback_data="news")],
+        [InlineKeyboardButton("💶 قیمت بروز ارز و طلا", callback_data="price"), InlineKeyboardButton("🌤️ هوای وین", callback_data="weather")],
+        [InlineKeyboardButton("📸 اینستاگرام", callback_data="insta"), InlineKeyboardButton("🌍 مترجم", callback_data="translate")],
+        [InlineKeyboardButton("🏠 راهنمای اتریش", callback_data="guide"), InlineKeyboardButton("⚙️ تنظیمات گروه", callback_data="group_settings")],
     ])
 
 def group_settings_menu(chat_id):
     g = get_group(chat_id)
+    insta_status = "✅" if g["insta_link"] else "❌"
+    auto_status = "✅" if g.get("auto_news") else "❌"
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(f"👋 خوش‌آمد: {'✅' if g['welcome'] else '❌'}", callback_data="toggle_welcome")],
         [InlineKeyboardButton(f"🔗 ضد لینک: {'✅' if g['anti_link'] else '❌'}", callback_data="toggle_antilink")],
-        [InlineKeyboardButton(f"📢 ضد تبلیغ: {'✅' if g['anti_tag'] else '❌'}", callback_data="toggle_antitag")],
         [InlineKeyboardButton(f"🌙 خاموشی: {'✅' if g['silent']['enabled'] else '❌'} {g['silent']['start']}-{g['silent']['end']}", callback_data="toggle_silent")],
+        [InlineKeyboardButton(f"📸 اینستا: {insta_status}", callback_data="set_insta_btn")],
+        [InlineKeyboardButton(f"📰 اخبار خودکار 2ساعته: {auto_status}", callback_data="toggle_autonews")],
         [InlineKeyboardButton("🔙 منو", callback_data="back")],
     ])
 
@@ -72,35 +84,42 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     name = update.effective_user.first_name
     await update.message.reply_text(
-        f"سلام {name} 👋\n**PRO v5.1 GROUP MANAGER** 🇦🇹🇮🇷\n\n🎵 MP3\n📰 اخبار ORF\n💶 قیمت نوبیتکس\n🌤️ هوا\n🌍 ترجمه\n👋 خوش‌آمد\n🔗 ضد لینک\n🚫 بن/کیک/سکوت\n🌙 خاموشی",
+        f"سلام {name} 👋\n**PRO v7 ULTIMATE** 🇦🇹🇮🇷\n\n🎵 MP3\n📰 اخبار کامل\n💶 قیمت بروز\n🌤️ هوا\n📸 اینستا لینک\n📰 اخبار خودکار هر 2 ساعت\n👋 خوش‌آمد\n🔗 ضد لینک\n🚫 بن/کیک/سکوت\n🌙 خاموشی",
         reply_markup=main_menu(), parse_mode="Markdown"
     )
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     txt = """
-🛠️ **راهنما**
+🛠️ **راهنما v7**
 
 **ادمین (ریپلای):**
 /ban /unban /kick
 /mute 1h /unmute
 
-**تنظیمات:**
+**تنظیمات گروه:**
 /anti_link on/off
 /welcome on/off
 /silent on 23 7
 /settings
+/set_insta https://instagram.com/yourpage
+/insta → نمایش اینستا
+/auto_news on/off → اخبار هر 2 ساعت
 
-**عمومی:** /price /news /weather
+**عمومی:** /price /news /weather /insta
 🎵 اسم آهنگ
 """
     await update.message.reply_text(txt, parse_mode="Markdown", reply_markup=main_menu())
 
+# --- خوش آمدگویی ---
 async def welcome_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
     g = get_group(update.effective_chat.id)
     if not g["welcome"]: return
     for m in update.message.new_chat_members:
         try:
-            await update.message.reply_text(g["welcome_text"].format(name=m.first_name))
+            txt = g["welcome_text"].format(name=m.first_name)
+            if g["insta_link"]:
+                txt += f"\n\n{g['insta_text']}\n{g['insta_link']}"
+            await update.message.reply_text(txt)
         except: pass
 
 async def anti_spam_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -120,12 +139,16 @@ async def anti_spam_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try: await update.message.delete(); return
             except: pass
     if g["anti_link"] and any(x in text for x in ["http://","https://","t.me/","www."]):
+        # اجازه اینستا خود مدیر رو بده
+        if g["insta_link"] and g["insta_link"].lower() in text:
+            return
         try:
             await update.message.delete()
             await context.bot.send_message(update.effective_chat.id, f"🔗 لینک {update.effective_user.first_name} حذف شد")
             return
         except: pass
 
+# --- دستورات ادمین ---
 async def ban_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_admin(update, context):
         await update.message.reply_text("❌ فقط ادمین"); return
@@ -159,12 +182,13 @@ async def kick_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def mute_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_admin(update, context): return
     if not update.message.reply_to_message:
-        await update.message.reply_text("ریپلای و /mute"); return
+        await update.message.reply_text("ریپلای کن و /mute"); return
     try:
         dur = 1
         if context.args:
             t = context.args[0].lower()
             if "h" in t: dur = int(t.replace("h",""))
+            elif "m" in t: dur = float(t.replace("m",""))/60
             else: dur = float(t)
         u = update.message.reply_to_message.from_user
         until = datetime.now() + timedelta(hours=dur)
@@ -185,100 +209,194 @@ async def anti_link_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_admin(update, context): return
     g = get_group(update.effective_chat.id)
     if context.args and context.args[0].lower() == "off":
-        g["anti_link"]=False; await update.message.reply_text("🔗 ضد لینک ❌ خاموش")
+        g["anti_link"] = False
+        await update.message.reply_text("🔗 ضد لینک ❌ خاموش")
     else:
-        g["anti_link"]=True; await update.message.reply_text("🔗 ضد لینک ✅ روشن")
+        g["anti_link"] = True
+        await update.message.reply_text("🔗 ضد لینک ✅ روشن")
     save_groups()
 
 async def welcome_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_admin(update, context): return
     g = get_group(update.effective_chat.id)
     if context.args and context.args[0].lower() == "off":
-        g["welcome"]=False; await update.message.reply_text("👋 خوش‌آمد ❌")
+        g["welcome"] = False
+        await update.message.reply_text("👋 خوش‌آمد ❌ خاموش")
     else:
-        g["welcome"]=True; await update.message.reply_text("👋 خوش‌آمد ✅")
+        g["welcome"] = True
+        await update.message.reply_text("👋 خوش‌آمد ✅ روشن")
     save_groups()
 
 async def silent_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_admin(update, context): return
     g = get_group(update.effective_chat.id)
     if not context.args or context.args[0].lower() == "off":
-        g["silent"]["enabled"]=False; await update.message.reply_text("🌙 خاموشی ❌"); save_groups(); return
+        g["silent"]["enabled"] = False
+        await update.message.reply_text("🌙 خاموشی ❌ خاموش")
+        save_groups()
+        return
     try:
-        if context.args[0].lower()=="on":
+        if context.args[0].lower() == "on":
             s = int(context.args[1]) if len(context.args)>1 else 23
             e = int(context.args[2]) if len(context.args)>2 else 7
         else:
-            s = int(context.args[0]); e = int(context.args[1]) if len(context.args)>1 else 7
-        g["silent"]["enabled"]=True; g["silent"]["start"]=s; g["silent"]["end"]=e
-        await update.message.reply_text(f"🌙 خاموشی ✅ {s} تا {e}"); save_groups()
-    except Exception as e: await update.message.reply_text(f"/silent on 23 7\n{e}")
+            s = int(context.args[0])
+            e = int(context.args[1]) if len(context.args)>1 else 7
+        g["silent"]["enabled"] = True
+        g["silent"]["start"] = s
+        g["silent"]["end"] = e
+        await update.message.reply_text(f"🌙 خاموشی ✅ {s} تا {e}")
+        save_groups()
+    except Exception as e:
+        await update.message.reply_text(f"مثال: /silent on 23 7\nخطا: {e}")
+
+# --- اینستا ---
+async def set_insta_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_admin(update, context):
+        await update.message.reply_text("فقط ادمین"); return
+    if not context.args:
+        await update.message.reply_text("بزن: /set_insta https://instagram.com/aziz.12230\nیا /set_insta off برای حذف")
+        return
+    g = get_group(update.effective_chat.id)
+    if context.args[0].lower() == "off":
+        g["insta_link"] = ""
+        await update.message.reply_text("📸 لینک اینستا حذف شد")
+    else:
+        link = " ".join(context.args)
+        g["insta_link"] = link
+        await update.message.reply_text(f"📸 لینک اینستا ذخیره شد:\n{link}\n\nحالا /insta بزن تا ببینی")
+    save_groups()
+
+async def insta_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    g = get_group(update.effective_chat.id)
+    if not g["insta_link"]:
+        await update.message.reply_text("📸 هنوز لینک اینستا تنظیم نشده\nادمین بزنه: /set_insta https://instagram.com/yourpage", reply_markup=main_menu())
+        return
+    txt = f"{g['insta_text']}\n\n📸 **اینستاگرام:**\n{g['insta_link']}"
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("📸 باز کردن اینستاگرام", url=g["insta_link"])]])
+    await update.message.reply_text(txt, reply_markup=kb, parse_mode="Markdown")
+
+# --- اخبار خودکار ---
+async def auto_news_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await check_admin(update, context): return
+    g = get_group(update.effective_chat.id)
+    if not context.args or context.args[0].lower() == "off":
+        g["auto_news"] = False
+        await update.message.reply_text("📰 اخبار خودکار هر 2 ساعت ❌ خاموش شد")
+    else:
+        g["auto_news"] = True
+        await update.message.reply_text("📰 اخبار خودکار هر 2 ساعت ✅ روشن شد\nربات هر 2 ساعت اخبار مهم رو خودکار میفرسته")
+    save_groups()
 
 async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_admin(update, context):
         await update.message.reply_text("فقط ادمین"); return
-    await update.message.reply_text("⚙️ تنظیمات گروه:", reply_markup=group_settings_menu(update.effective_chat.id))
+    await update.message.reply_text("⚙️ تنظیمات گروه v7:", reply_markup=group_settings_menu(update.effective_chat.id))
 
-# ---------- FIXED: اخبار و قیمت و هوا - تضمینی جواب میده ----------
+# --- اخبار کامل ---
+def fetch_rss_titles(url, limit=4):
+    try:
+        r = requests.get(url, timeout=8, headers={"User-Agent":"Mozilla/5.0"})
+        titles = re.findall(r"<title>(.*?)</title>", r.text, re.DOTALL)
+        links = re.findall(r"<link>(.*?)</link>", r.text, re.DOTALL)
+        clean = []
+        for i in range(1, min(limit+1, len(titles))):
+            t = titles[i]
+            t = re.sub(r"<.*?>","",t)
+            t = t.replace("<![CDATA[","").replace("]]>","").replace("&quot;","\"").replace("&amp;","&").replace("*","").strip()
+            if len(t) < 10: continue
+            link = ""
+            if i < len(links):
+                link = re.sub(r"<.*?>","",links[i]).strip().replace("<![CDATA[","").replace("]]>","").strip()
+            clean.append((t[:120], link))
+        return clean
+    except Exception as e:
+        print(f"rss err {url} {e}")
+        return []
+
+def get_full_news_text():
+    txt = f"📰 **اخبار خودکار - {datetime.now().strftime('%H:%M %d/%m')}** 🇦🇹🇮🇷\n\n"
+    orf_news = fetch_rss_titles("https://rss.orf.at/orf.xml", limit=4)
+    if orf_news:
+        txt += "🇦🇹 **اتریش - ORF:**\n"
+        for t, link in orf_news:
+            txt += f"• {t}\n"
+            if link and "http" in link:
+                txt += f"  {link}\n"
+            txt += "\n"
+    else:
+        txt += "🇦🇹 ORF: https://orf.at\n\n"
+    bbc_news = fetch_rss_titles("https://feeds.bbci.co.uk/persian/rss.xml", limit=4)
+    if bbc_news:
+        txt += "🇮🇷 **ایران/جهان - BBC:**\n"
+        for t, link in bbc_news:
+            txt += f"• {t}\n"
+            if link:
+                txt += f"  {link}\n"
+            txt += "\n"
+    if len(txt) > 3900:
+        txt = txt[:3900] + "\n..."
+    return txt
+
 async def send_news(update_obj):
     try:
         target = update_obj.message if hasattr(update_obj, 'message') else update_obj
-        txt = "📰 **اخبار تست شده ✅**\n\n🇦🇹 **ORF:**\n"
+        await target.reply_text("📰 در حال دریافت اخبار بروز... ⏳")
+        txt = get_full_news_text()
+        await target.reply_text(txt, reply_markup=main_menu(), parse_mode="Markdown", disable_web_page_preview=True)
         try:
-            r = requests.get("https://rss.orf.at/orf.xml", timeout=6)
-            titles = re.findall(r"<title>(.*?)</title>", r.text)
-            for i in range(1, min(5, len(titles))):
-                t = titles[i].replace("<![CDATA[","").replace("]]>","").replace("*","")[:90]
-                txt += f"• {t}\nhttps://orf.at\n\n"
-        except Exception as e:
-            print(f"news {e}")
-            txt += "• https://orf.at - سایت ORF\n"
-        txt += "\n🇮🇷 BBC: https://www.bbc.com/persian\n"
-        await target.reply_text(txt[:3500], reply_markup=main_menu(), parse_mode="Markdown", disable_web_page_preview=True)
-        try:
-            if hasattr(update_obj, 'answer'): await update_obj.answer()
+            if hasattr(update_obj,'answer'): await update_obj.answer()
         except: pass
     except Exception as e:
         print(f"news fatal {e}")
         try:
             t = update_obj.message if hasattr(update_obj,'message') else update_obj
-            await t.reply_text("📰 https://orf.at \nhttps://bbc.com/persian", reply_markup=main_menu())
+            await t.reply_text("📰 ORF: https://orf.at\nBBC: https://bbc.com/persian", reply_markup=main_menu())
         except: pass
 
 async def send_price(update_obj):
     try:
         target = update_obj.message if hasattr(update_obj, 'message') else update_obj
-        txt = f"💶 **قیمت {datetime.now().strftime('%H:%M')} ✅**\n\n"
+        txt = f"💶 **قیمت بروز - {datetime.now().strftime('%H:%M %d/%m')} ✅**\n\n"
+        got_live = False
         try:
-            r = requests.get("https://apiv2.nobitex.ir/market/stats", params={"srcCurrency":"eur","dstCurrency":"irt"}, timeout=7).json()
-            eur = int(float(r['stats']['eur-irt']['latest']))
-            txt += f"🇪🇺 یورو: {eur:,} تومان\n"
-        except:
-            txt += "🇪🇺 یورو: ~85,500 تومان\n"
-        try:
-            r2 = requests.get("https://apiv2.nobitex.ir/market/stats", params={"srcCurrency":"usd","dstCurrency":"irt"}, timeout=7).json()
-            usd = int(float(r2['stats']['usd-irt']['latest']))
-            txt += f"🇺🇸 دلار: {usd:,} تومان\n"
-        except:
-            txt += "🇺🇸 دلار: ~79,200 تومان\n"
-        txt += "\n🥇 طلا 18: ~3,650,000\n💰 سکه: ~42,500,000\n_Nobitex_"
+            r = requests.get("https://nerkh.jahankhahan.shop/data/live.json", timeout=8).json()
+            rates = r.get("rates", {})
+            date = r.get("date",""); time_ = r.get("time","")
+            euro = rates.get("euro", 0); dollar = rates.get("dollar", 0); gold18 = rates.get("gold", 0)
+            emami = rates.get("emami", rates.get("sekkeh", 0)); ounce = r.get("ounce", 0)
+            if euro:
+                txt += f"🇪🇺 **یورو آزاد:** {euro:,} تومان\n"; got_live = True
+            if dollar:
+                txt += f"🇺🇸 **دلار آزاد:** {dollar:,} تومان\n"; got_live = True
+            if gold18:
+                txt += f"\n🥇 **طلا 18:** {gold18:,} تومان/گرم\n"
+            if emami:
+                txt += f"🪙 **سکه امامی:** {emami:,} تومان\n"
+            if ounce:
+                txt += f"🌍 **انس:** ${ounce:,.0f}\n"
+            if got_live:
+                txt += f"\n🕐 {date} {time_}\n_منبع: Nerkhsanj_"
+            else:
+                raise Exception("no rates")
+        except Exception as e:
+            print(f"nerkh err {e}")
+            txt += "خطا دریافت قیمت - /price دوباره بزن\n"
         await target.reply_text(txt, reply_markup=main_menu(), parse_mode="Markdown")
         try:
             if hasattr(update_obj,'answer'): await update_obj.answer()
         except: pass
     except Exception as e:
-        print(f"price {e}")
-        t = update_obj.message if hasattr(update_obj,'message') else update_obj
-        await t.reply_text("💶 قیمت: یورو ~85k دلار ~79k", reply_markup=main_menu())
+        print(f"price fatal {e}")
 
 async def send_weather(update_obj):
     try:
         target = update_obj.message if hasattr(update_obj,'message') else update_obj
         try:
-            url = "https://api.open-meteo.com/v1/forecast?latitude=48.2082&longitude=16.3738&current=temperature_2m&timezone=Europe/Vienna"
+            url = "https://api.open-meteo.com/v1/forecast?latitude=48.2082&longitude=16.3738&current=temperature_2m,wind_speed_10m&timezone=Europe/Vienna"
             r = requests.get(url, timeout=6).json()
-            temp = r['current']['temperature_2m']
-            txt = f"🌤️ **هوای وین: {temp}°C ✅**"
+            temp = r['current']['temperature_2m']; wind = r['current']['wind_speed_10m']
+            txt = f"🌤️ **هوای وین: {temp}°C**\n💨 باد: {wind} km/h"
         except:
             txt = "🌤️ هوای وین: ~16°C"
         await target.reply_text(txt, reply_markup=main_menu(), parse_mode="Markdown")
@@ -298,11 +416,10 @@ def translate_real(text):
     except: return None
 
 async def download_music(update: Update, q: str):
-    msg = await update.message.reply_text(f"🔍 `{q}` در حال دانلود... (30ث)", parse_mode="Markdown")
+    msg = await update.message.reply_text(f"🔍 `{q}` دانلود... (30ث)", parse_mode="Markdown")
     try:
         import yt_dlp, glob
         tmpdir = tempfile.mkdtemp()
-        # غیر بلاک کننده - اجرا در ترد جدا
         def do_download():
             opts = {'format':'bestaudio/best','outtmpl':f'{tmpdir}/%(title)s.%(ext)s','noplaylist':True,'quiet':True,'default_search':'ytsearch1','postprocessors':[{'key':'FFmpegExtractAudio','preferredcodec':'mp3','preferredquality':'192'}],'max_filesize':20*1024*1024}
             try:
@@ -328,8 +445,7 @@ async def download_music(update: Update, q: str):
     except Exception as e:
         print(f"music err {e}")
         url = f"https://www.youtube.com/results?search_query={q.replace(' ', '+')}"
-        await update.message.reply_text(f"▶️ لینک (دانلود مستقیم موقتا قطع): {url}")
-
+        await update.message.reply_text(f"▶️ لینک: {url}")
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -340,6 +456,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "news": await send_news(q)
     elif data == "price": await send_price(q)
     elif data == "weather": await send_weather(q)
+    elif data == "insta": await insta_cmd(q, context)
     elif data == "music":
         await q.message.reply_text("🎵 اسم آهنگ بفرست", parse_mode="Markdown")
         context.user_data["mode"]="music"
@@ -351,14 +468,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "group_settings":
         if not await check_admin(update, context):
             await q.message.reply_text("فقط ادمین!"); return
-        await q.message.reply_text("⚙️ تنظیمات گروه:", reply_markup=group_settings_menu(q.message.chat.id))
+        await q.message.reply_text("⚙️ تنظیمات گروه v7:", reply_markup=group_settings_menu(q.message.chat.id))
+    elif data == "set_insta_btn":
+        if not await check_admin(update, context): return
+        await q.message.reply_text("📸 لینک اینستات رو بفرست:\n/set_insta https://instagram.com/aziz.12230\nیا /set_insta off برای حذف")
     elif data.startswith("toggle_"):
         if not await check_admin(update, context): return
         g = get_group(q.message.chat.id)
         if data=="toggle_welcome": g["welcome"]=not g["welcome"]
         elif data=="toggle_antilink": g["anti_link"]=not g["anti_link"]
-        elif data=="toggle_antitag": g["anti_tag"]=not g["anti_tag"]
         elif data=="toggle_silent": g["silent"]["enabled"]=not g["silent"]["enabled"]
+        elif data=="toggle_autonews": g["auto_news"]=not g.get("auto_news", False)
         save_groups()
         try: await q.edit_message_reply_markup(reply_markup=group_settings_menu(q.message.chat.id))
         except: await q.message.reply_text("✅", reply_markup=group_settings_menu(q.message.chat.id))
@@ -372,10 +492,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.type != "private":
         await anti_spam_handler(update, context)
         g = get_group(update.effective_chat.id)
-        if g["anti_link"] and any(x in text.lower() for x in ["http://","https://","t.me/"]): return
+        if g["anti_link"] and any(x in text.lower() for x in ["http://","https://","t.me/"]):
+            if g["insta_link"] and g["insta_link"].lower() in text.lower():
+                pass
+            else:
+                return
     if "قیمت" in text or text.startswith("/price"): await send_price(update.message); return
     if "هوا" in text or text.startswith("/weather"): await send_weather(update.message); return
     if "اخبار" in text or text.startswith("/news"): await send_news(update.message); return
+    if text.startswith("/insta") or "اینستا" in text: await insta_cmd(update, context); return
     if mode=="translate":
         tr=translate_real(text)
         if tr: await update.message.reply_text(f"🌍 `{text}`\n⬇️\n**{tr}**", parse_mode="Markdown", reply_markup=main_menu())
@@ -390,20 +515,38 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.type=="private":
         await update.message.reply_text("منو:", reply_markup=main_menu())
 
+# --- اخبار خودکار هر 2 ساعت ---
+async def auto_news_job(context: ContextTypes.DEFAULT_TYPE):
+    print("AUTO NEWS JOB running...")
+    try:
+        # همه گروه هایی که auto_news روشن دارن
+        for cid, g in list(GROUPS.items()):
+            if g.get("auto_news"):
+                try:
+                    txt = get_full_news_text()
+                    # اضافه اینستا
+                    if g.get("insta_link"):
+                        txt += f"\n\n📸 {g['insta_text']}\n{g['insta_link']}"
+                    await context.bot.send_message(chat_id=int(cid), text=txt, parse_mode="Markdown", disable_web_page_preview=True, reply_markup=main_menu())
+                    print(f"auto news sent to {cid}")
+                    await asyncio.sleep(1)
+                except Exception as e:
+                    print(f"auto news err {cid} {e}")
+    except Exception as e:
+        print(f"auto job fatal {e}")
+
 flask_app = Flask(__name__)
 @flask_app.route('/')
 def home():
-    return "🤖 PRO v5.2 GROUP MANAGER - ALIVE - @Iraniane_moghime_Otrish_bot - FIXED FREEZE"
+    return "🤖 PRO v7 ULTIMATE - INSTA + AUTO NEWS 2H - @Iraniane_moghime_Otrish_bot"
 @flask_app.route('/ping')
 def ping():
     return "pong"
 
 def run_flask():
     port=int(os.environ.get("PORT",10000))
-    # keep alive - disable reloader
     flask_app.run(host="0.0.0.0", port=port, use_reloader=False)
 
-# خودکار پینگ برای بیدار نگه داشتن Render مجانی
 def keep_alive_ping():
     import time
     time.sleep(60)
@@ -414,8 +557,7 @@ def keep_alive_ping():
             print("keep-alive ping OK")
         except Exception as e:
             print(f"keep-alive err {e}")
-        time.sleep(600)  # هر 10 دقیقه
-
+        time.sleep(600)
 
 def main():
     try: asyncio.get_event_loop()
@@ -434,14 +576,22 @@ def main():
     app.add_handler(CommandHandler("welcome", welcome_cmd))
     app.add_handler(CommandHandler("silent", silent_cmd))
     app.add_handler(CommandHandler("settings", settings_cmd))
+    app.add_handler(CommandHandler("set_insta", set_insta_cmd))
+    app.add_handler(CommandHandler("insta", insta_cmd))
+    app.add_handler(CommandHandler("auto_news", auto_news_cmd))
     app.add_handler(CommandHandler("price", lambda u,c: send_price(u.message)))
     app.add_handler(CommandHandler("news", lambda u,c: send_news(u.message)))
     app.add_handler(CommandHandler("weather", lambda u,c: send_weather(u.message)))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    print("PRO v5.2 GROUP MANAGER FIXED - ANTI FREEZE روشن شد...")
-    # drop_pending_updates برای حل گیر کردن
+    # JobQueue - اخبار هر 2 ساعت
+    if app.job_queue:
+        app.job_queue.run_repeating(auto_news_job, interval=7200, first=7200)
+        print("Auto news job scheduled every 2h")
+    else:
+        print("JobQueue not available")
+    print("PRO v7 ULTIMATE - INSTA + AUTO NEWS روشن شد...")
     app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES, close_loop=False)
 
 if __name__ == "__main__":
