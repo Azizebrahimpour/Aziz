@@ -251,32 +251,102 @@ async def silent_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"مثال: /silent on 23 7\nخطا: {e}")
 
 # --- اینستا ---
+
 async def set_insta_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_admin(update, context):
         await update.message.reply_text("فقط ادمین"); return
     if not context.args:
-        await update.message.reply_text("بزن: /set_insta https://instagram.com/aziz.12230\nیا /set_insta off برای حذف")
+        await update.message.reply_text("بزن: /set_insta https://instagram.com/aziz.12230\nیا /set_insta off برای حذف\n\nنکته: فقط لینک بفرست، کلمه اضافه ننویس")
         return
     g = get_group(update.effective_chat.id)
-    if context.args[0].lower() == "off":
+    raw = " ".join(context.args).strip()
+    if raw.lower() == "off" or raw.lower() == "delete" or raw.lower() == "حذف":
         g["insta_link"] = ""
         await update.message.reply_text("📸 لینک اینستا حذف شد")
+        save_groups()
+        return
+    # استخراج فقط لینک با regex - مشکل عکس شما همین بود که دو بار نوشتی set_insta
+    match = re.search(r"(https?://[\w./?=_-]+)", raw)
+    if match:
+        link = match.group(1)
     else:
-        link = " ".join(context.args)
-        g["insta_link"] = link
-        await update.message.reply_text(f"📸 لینک اینستا ذخیره شد:\n{link}\n\nحالا /insta بزن تا ببینی")
+        # اگر فقط یوزرنیم داد
+        if "instagram.com" in raw.lower():
+            link = raw.split()[0]
+            if not link.startswith("http"):
+                link = "https://" + link
+        else:
+            # یوزرنیم خالی مثل aziz.12230
+            username = raw.split()[0].replace("@","").strip()
+            link = f"https://instagram.com/{username}"
+    # پاکسازی نهایی - فقط اولین لینک
+    link = link.split()[0].strip()
+    # اگر اشتباهی set_insta داخلش موند حذف کن
+    link = link.replace("set_insta","").strip()
+    # حتما instagram.com داشته باشه
+    if "instagram.com" not in link.lower() and "instagr.am" not in link.lower():
+        await update.message.reply_text(f"❌ لینک نامعتبر: {link}\nدرستش اینه: https://instagram.com/aziz.12230")
+        return
+    g["insta_link"] = link
+    await update.message.reply_text(f"✅ لینک اینستا ذخیره شد:\n{link}\n\nحالا بزن /insta تا تست کنی", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📸 باز کردن اینستا", url=link)]]))
     save_groups()
 
 async def insta_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    g = get_group(update.effective_chat.id)
-    if not g["insta_link"]:
-        await update.message.reply_text("📸 هنوز لینک اینستا تنظیم نشده\nادمین بزنه: /set_insta https://instagram.com/yourpage", reply_markup=main_menu())
+    # ساپورت هم Message و هم CallbackQuery
+    chat_id = None
+    message_obj = None
+    if isinstance(update, Update):
+        chat_id = update.effective_chat.id
+        message_obj = update.message
+    else:  # CallbackQuery
+        chat_id = update.message.chat.id
+        message_obj = update.message
+        # برای CallbackQuery از update استفاده میکنیم
+        try:
+            update = update  # keep
+        except:
+            pass
+    
+    # اگر از CallbackQuery اومده، باید از message_obj استفاده کنیم
+    actual_chat_id = chat_id
+    if hasattr(update, 'effective_chat') and update.effective_chat:
+        actual_chat_id = update.effective_chat.id
+    elif hasattr(update, 'message') and update.message:
+        actual_chat_id = update.message.chat.id
+        message_obj = update.message
+    
+    g = get_group(actual_chat_id)
+    if not g["insta_link"] or g["insta_link"].strip() == "":
+        text = "📸 هنوز لینک اینستا تنظیم نشده\nادمین بزنه:\n/set_insta https://instagram.com/aziz.12230"
+        if message_obj:
+            await message_obj.reply_text(text, reply_markup=main_menu())
+        else:
+            await update.message.reply_text(text, reply_markup=main_menu())
         return
-    txt = f"{g['insta_text']}\n\n📸 **اینستاگرام:**\n{g['insta_link']}"
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("📸 باز کردن اینستاگرام", url=g["insta_link"])]])
-    await update.message.reply_text(txt, reply_markup=kb, parse_mode="Markdown")
+    link = g["insta_link"].strip()
+    txt = f"{g['insta_text']}\n\n📸 **اینستاگرام:**\n{link}"
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("📸 باز کردن اینستاگرام", url=link)]])
+    try:
+        if isinstance(update, Update):
+            await update.message.reply_text(txt, reply_markup=kb, parse_mode="Markdown")
+        else:
+            # CallbackQuery
+            await update.message.reply_text(txt, reply_markup=kb, parse_mode="Markdown")
+            try: await update.answer()
+            except: pass
+    except Exception as e:
+        print(f"insta err {e} link={link}")
+        # fallback بدون دکمه اگر لینک خرابه
+        clean_link = link.split()[0]
+        try:
+            if isinstance(update, Update):
+                await update.message.reply_text(f"📸 اینستاگرام:\n{clean_link}", reply_markup=main_menu())
+            else:
+                await update.message.reply_text(f"📸 اینستاگرام:\n{clean_link}", reply_markup=main_menu())
+        except:
+            pass
 
-# --- اخبار خودکار ---
+
 async def auto_news_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_admin(update, context): return
     g = get_group(update.effective_chat.id)
