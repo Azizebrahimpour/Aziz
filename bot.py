@@ -1,6 +1,6 @@
 
 """
-PRO v7 ULTIMATE - GROUP MANAGER + INSTA + AUTO NEWS EVERY 2H
+PRO v8 ULTIMATE - FULL NEWS EVERY 4H + INSTA + GROUP MANAGER
 @Iraniane_moghime_Otrish_bot
 Features: welcome, anti-link, ban/kick/mute, silent, insta link, auto news 2h, real price, real news
 """
@@ -84,7 +84,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     name = update.effective_user.first_name
     await update.message.reply_text(
-        f"سلام {name} 👋\n**PRO v7 ULTIMATE** 🇦🇹🇮🇷\n\n🎵 MP3\n📰 اخبار کامل\n💶 قیمت بروز\n🌤️ هوا\n📸 اینستا لینک\n📰 اخبار خودکار هر 2 ساعت\n👋 خوش‌آمد\n🔗 ضد لینک\n🚫 بن/کیک/سکوت\n🌙 خاموشی",
+        f"سلام {name} 👋\n**PRO v7 ULTIMATE** 🇦🇹🇮🇷\n\n🎵 MP3\n📰 اخبار کامل\n💶 قیمت بروز\n🌤️ هوا\n📸 اینستا لینک\n📰 اخبار خودکار هر 4 ساعت\n👋 خوش‌آمد\n🔗 ضد لینک\n🚫 بن/کیک/سکوت\n🌙 خاموشی",
         reply_markup=main_menu(), parse_mode="Markdown"
     )
 
@@ -317,28 +317,41 @@ async def auto_news_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     g = get_group(update.effective_chat.id)
     if not context.args or context.args[0].lower() == "off":
         g["auto_news"] = False
-        await update.message.reply_text("📰 اخبار خودکار هر 2 ساعت ❌ خاموش شد")
+        await update.message.reply_text("📰 اخبار کامل هر 4 ساعت ❌ خاموش شد")
     else:
         g["auto_news"] = True
-        await update.message.reply_text("📰 اخبار خودکار هر 2 ساعت ✅ روشن شد\nربات هر 2 ساعت اخبار مهم رو خودکار میفرسته")
+        await update.message.reply_text("📰 اخبار خودکار هر 4 ساعت ✅ روشن شد\nربات هر 2 ساعت اخبار مهم رو خودکار میفرسته")
     save_groups()
 
 async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_admin(update, context):
         await update.message.reply_text("فقط ادمین"); return
-    await update.message.reply_text("⚙️ تنظیمات گروه v7:", reply_markup=group_settings_menu(update.effective_chat.id))
+    await update.message.reply_text("⚙️ تنظیمات گروه v8:", reply_markup=group_settings_menu(update.effective_chat.id))
 
 # --- اخبار کامل ---
+# --- اخبار کامل با متن کامل ---
 def fetch_rss_titles(url, limit=4):
+    try:
+        import feedparser
+        feed = feedparser.parse(url)
+        clean = []
+        for entry in feed.entries[:limit]:
+            title = entry.get("title","").strip()[:150]
+            link = entry.get("link","").strip()
+            if len(title) < 10: continue
+            clean.append((title, link))
+        if clean:
+            return clean
+    except Exception as e:
+        print(f"feedparser err {e}")
+    # fallback regex
     try:
         r = requests.get(url, timeout=8, headers={"User-Agent":"Mozilla/5.0"})
         titles = re.findall(r"<title>(.*?)</title>", r.text, re.DOTALL)
         links = re.findall(r"<link>(.*?)</link>", r.text, re.DOTALL)
         clean = []
         for i in range(1, min(limit+1, len(titles))):
-            t = titles[i]
-            t = re.sub(r"<.*?>","",t)
-            t = t.replace("<![CDATA[","").replace("]]>","").replace("&quot;","\"").replace("&amp;","&").replace("*","").strip()
+            t = re.sub(r"<.*?>","",titles[i]).replace("<![CDATA[","").replace("]]>","").replace("&quot;","\"").replace("&amp;","&").replace("*","").strip()
             if len(t) < 10: continue
             link = ""
             if i < len(links):
@@ -349,29 +362,107 @@ def fetch_rss_titles(url, limit=4):
         print(f"rss err {url} {e}")
         return []
 
+def fetch_article_text(url, max_chars=350):
+    """متن کامل خبر رو از خود سایت می‌کشه"""
+    try:
+        headers = {"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        r = requests.get(url, timeout=10, headers=headers)
+        html = r.text
+        # حذف تگ ها - سعی کن اولین پاراگراف ها رو پیدا کنی
+        # برای ORF
+        if "orf.at" in url:
+            # ORF article body
+            m = re.findall(r'<p[^>]*>(.*?)</p>', html, re.DOTALL)
+            texts = []
+            for p in m[:4]:
+                t = re.sub(r"<.*?>","",p).strip()
+                t = t.replace("&nbsp;"," ").replace("&quot;","\"").replace("&amp;","&").replace("&apos;","'")
+                if len(t) > 40:
+                    texts.append(t)
+            if texts:
+                full = " ".join(texts)[:max_chars]
+                return full
+        # برای BBC Persian
+        if "bbc.com" in url or "bbc.co.uk" in url:
+            m = re.findall(r'<p[^>]*class="[^"]*Paragraph[^"]*"[^>]*>(.*?)</p>', html, re.DOTALL)
+            if not m:
+                m = re.findall(r'<p[^>]*>(.*?)</p>', html, re.DOTALL)
+            texts = []
+            for p in m[:4]:
+                t = re.sub(r"<.*?>","",p).strip()
+                if len(t) > 40 and "BBC" not in t[:20]:
+                    texts.append(t)
+            if texts:
+                full = " ".join(texts)[:max_chars]
+                return full
+        # عمومی
+        m = re.findall(r'<p[^>]*>(.*?)</p>', html, re.DOTALL)
+        for p in m[:6]:
+            t = re.sub(r"<.*?>","",p).strip()
+            if len(t) > 60:
+                return t[:max_chars]
+    except Exception as e:
+        print(f"article fetch err {url} {e}")
+    return ""
+
 def get_full_news_text():
-    txt = f"📰 **اخبار خودکار - {datetime.now().strftime('%H:%M %d/%m')}** 🇦🇹🇮🇷\n\n"
-    orf_news = fetch_rss_titles("https://rss.orf.at/orf.xml", limit=4)
-    if orf_news:
-        txt += "🇦🇹 **اتریش - ORF:**\n"
-        for t, link in orf_news:
-            txt += f"• {t}\n"
-            if link and "http" in link:
-                txt += f"  {link}\n"
+    """اخبار کامل با متن - بروز و معتبر"""
+    txt = f"📰 **اخبار کامل - {datetime.now().strftime('%H:%M %d/%m')}** 🇦🇹🇮🇷\n\n"
+    
+    # ORF اتریش - 3 خبر با متن کامل
+    try:
+        orf_news = fetch_rss_titles("https://rss.orf.at/news.xml", limit=3)
+        if not orf_news:
+            orf_news = fetch_rss_titles("https://rss.orf.at/orf.xml", limit=3)
+        if orf_news:
+            txt += "🇦🇹 **اتریش - ORF (رسمی اتریش):**\n\n"
+            for i, (title, link) in enumerate(orf_news, 1):
+                txt += f"**{i}. {title}**\n"
+                if link:
+                    body = fetch_article_text(link, max_chars=250)
+                    if body:
+                        txt += f"{body}...\n"
+                    txt += f"🔗 {link}\n\n"
+        else:
+            txt += "🇦🇹 ORF: https://orf.at\n\n"
+    except Exception as e:
+        print(f"ORF news err {e}")
+
+    # BBC Persian - 3 خبر با متن کامل
+    try:
+        bbc_news = fetch_rss_titles("https://feeds.bbci.co.uk/persian/rss.xml", limit=3)
+        if bbc_news:
+            txt += "🇮🇷 **ایران/جهان - BBC فارسی (معتبر):**\n\n"
+            for i, (title, link) in enumerate(bbc_news, 1):
+                txt += f"**{i}. {title}**\n"
+                if link:
+                    body = fetch_article_text(link, max_chars=250)
+                    if body:
+                        txt += f"{body}...\n"
+                    txt += f"🔗 {link}\n\n"
+    except Exception as e:
+        print(f"BBC news err {e}")
+
+    # ایسنا - اضافی
+    try:
+        isna_news = fetch_rss_titles("https://www.isna.ir/rss", limit=2)
+        if isna_news:
+            txt += "📰 **ایران - ایسنا:**\n"
+            for title, link in isna_news:
+                txt += f"• {title}\n"
+                if link:
+                    txt += f"  {link}\n"
             txt += "\n"
-    else:
-        txt += "🇦🇹 ORF: https://orf.at\n\n"
-    bbc_news = fetch_rss_titles("https://feeds.bbci.co.uk/persian/rss.xml", limit=4)
-    if bbc_news:
-        txt += "🇮🇷 **ایران/جهان - BBC:**\n"
-        for t, link in bbc_news:
-            txt += f"• {t}\n"
-            if link:
-                txt += f"  {link}\n"
-            txt += "\n"
-    if len(txt) > 3900:
-        txt = txt[:3900] + "\n..."
+    except:
+        pass
+
+    txt += f"🕐 بروزرسانی: {datetime.now().strftime('%H:%M')} به وقت وین\n"
+    txt += f"📸 ما: @Iraniane_moghime_Otrish_bot"
+
+    if len(txt) > 4000:
+        txt = txt[:3950] + "\n... ادامه در لینک‌ها"
     return txt
+
 
 async def send_news(update_obj):
     try:
@@ -503,7 +594,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "group_settings":
         if not await check_admin(update, context):
             await q.message.reply_text("فقط ادمین!"); return
-        await q.message.reply_text("⚙️ تنظیمات گروه v7:", reply_markup=group_settings_menu(q.message.chat.id))
+        await q.message.reply_text("⚙️ تنظیمات گروه v8:", reply_markup=group_settings_menu(q.message.chat.id))
     elif data == "set_insta_btn":
         if not await check_admin(update, context): return
         await q.message.reply_text("📸 لینک اینستات رو بفرست:\n/set_insta https://instagram.com/aziz.12230\nیا /set_insta off برای حذف")
@@ -583,7 +674,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("منو:", reply_markup=main_menu())
 
 
-# --- اخبار خودکار هر 2 ساعت ---
+# --- اخبار خودکار هر 4 ساعت ---
 async def auto_news_job(context: ContextTypes.DEFAULT_TYPE):
     print("AUTO NEWS JOB running...")
     try:
@@ -606,7 +697,7 @@ async def auto_news_job(context: ContextTypes.DEFAULT_TYPE):
 flask_app = Flask(__name__)
 @flask_app.route('/')
 def home():
-    return "🤖 PRO v7 ULTIMATE - INSTA + AUTO NEWS 2H - @Iraniane_moghime_Otrish_bot"
+    return "🤖 PRO v8 ULTIMATE - INSTA + AUTO NEWS 4H FULL - @Iraniane_moghime_Otrish_bot"
 @flask_app.route('/ping')
 def ping():
     return "pong"
@@ -655,8 +746,8 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     # JobQueue - اخبار هر 2 ساعت
     if app.job_queue:
-        app.job_queue.run_repeating(auto_news_job, interval=7200, first=7200)
-        print("Auto news job scheduled every 2h")
+        app.job_queue.run_repeating(auto_news_job, interval=14400, first=3600)
+        print("Auto news job scheduled every 4h with FULL content")
     else:
         print("JobQueue not available")
     print("PRO v7 ULTIMATE - INSTA + AUTO NEWS روشن شد...")
