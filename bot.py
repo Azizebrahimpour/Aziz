@@ -629,6 +629,21 @@ async def auto_news_job(context):
                 except Exception as e: print(f"auto news err {cid} {e}")
     except Exception as e: print(f"auto job fatal {e}")
 
+
+async def guide_kar(update, context):
+    await update.message.reply_text("💼 **کار در اتریش:**\n• AMS.at - سایت کاریابی دولتی\n• karriere.at / StepStone.at\n• برای ایرانیا: نیاز به Rot-Weiß-Rot Karte یا اجازه کار\n• CV به آلمانی بنویس", reply_markup=main_menu(), parse_mode="Markdown")
+async def guide_doctor(update, context):
+    await update.message.reply_text("🩺 **دکتر فارسی در وین:**\n• Dr. Fard - 01/123...\n• جستجو: docfinder.at → فارسی\n• برای بیمه: e-card همراهت باشه\n• اورژانس: 144", reply_markup=main_menu(), parse_mode="Markdown")
+async def guide_shop(update, context):
+    await update.message.reply_text("🛒 **فروشگاه ایرانی وین:**\n• Mayr / Nasr / Iran Shop - 10. Bezirk\n• Schwedenplatz - چندتا مغازه ایرانی\n• برنج، زعفرون، سبزی قورمه", reply_markup=main_menu(), parse_mode="Markdown")
+async def guide_eghamat(update, context):
+    await update.message.reply_text("🪪 **اقامت اتریش:**\n• دانشجویی → کار → RWR Karte\n• تمدید 3 ماه قبل از اتمام\n• MA 35 برای وین", reply_markup=main_menu(), parse_mode="Markdown")
+async def guide_melde(update, context):
+    await update.message.reply_text("📋 **Meldezettel:**\nظرف 3 روز بعد از ورود باید تو Magistrat ثبت کنی. مدرک: قرارداد خونه + پاسپورت\n🏠 MA 35", reply_markup=main_menu(), parse_mode="Markdown")
+async def guide_cmd(update, context):
+    await update.message.reply_text("🏠 **راهنمای اتریش - دستورها:**\n\n/kar - کار\n/doctor - دکتر\n/shop - فروشگاه ایرانی\n/eghamat - اقامت\n/melde - ملدزتل\n/guide - همین لیست\n\nتو گروه: همین دستورها رو بزن یا ربات رو منشن کن: @Iraniane_moghime_Otrish_bot کار", reply_markup=main_menu(), parse_mode="Markdown")
+
+
 flask_app=Flask(__name__)
 @flask_app.route('/')
 def home(): return "🤖 PRO v9 FULL NEWS 4H - @Iraniane_moghime_Otrish_bot"
@@ -667,6 +682,12 @@ def main():
     app.add_handler(CommandHandler("price", lambda u,c: send_price(u.message)))
     app.add_handler(CommandHandler("news", lambda u,c: send_news(u.message)))
     app.add_handler(CommandHandler("weather", lambda u,c: send_weather(u.message)))
+    app.add_handler(CommandHandler("guide", guide_cmd))
+    app.add_handler(CommandHandler("kar", guide_kar))
+    app.add_handler(CommandHandler("doctor", guide_doctor))
+    app.add_handler(CommandHandler("shop", guide_shop))
+    app.add_handler(CommandHandler("eghamat", guide_eghamat))
+    app.add_handler(CommandHandler("melde", guide_melde))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
