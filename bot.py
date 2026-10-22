@@ -519,36 +519,69 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except: await q.message.reply_text("✅", reply_markup=group_settings_menu(q.message.chat.id))
     elif data=="back": await q.message.reply_text("منو:", reply_markup=main_menu())
 
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
     mode = context.user_data.get("mode","ai")
     text = update.message.text.strip()
-    print(f"MSG {mode} {text}")
+    print(f"MSG {mode} {text} chat={update.effective_chat.type}")
+    # ضد لینک چک برای گروه
     if update.effective_chat.type != "private":
         await anti_spam_handler(update, context)
         g = get_group(update.effective_chat.id)
         if g["anti_link"] and any(x in text.lower() for x in ["http://","https://","t.me/"]):
-            if g["insta_link"] and g["insta_link"].lower() in text.lower():
+            if g.get("insta_link") and g["insta_link"].lower() in text.lower():
                 pass
             else:
                 return
-    if "قیمت" in text or text.startswith("/price"): await send_price(update.message); return
-    if "هوا" in text or text.startswith("/weather"): await send_weather(update.message); return
-    if "اخبار" in text or text.startswith("/news"): await send_news(update.message); return
-    if text.startswith("/insta") or "اینستا" in text: await insta_cmd(update, context); return
+
+    # --- دستورات عمومی برای همه (گروه و پیوی) ---
+    if "قیمت" in text or text.startswith("/price") or "price" in text.lower():
+        await send_price(update.message); return
+    if "هوا" in text or text.startswith("/weather") or "weather" in text.lower():
+        await send_weather(update.message); return
+    if "اخبار" in text or text.startswith("/news"):
+        await send_news(update.message); return
+    if text.startswith("/insta") or "اینستا" in text:
+        await insta_cmd(update, context); return
+
+    # ترجمه
     if mode=="translate":
         tr=translate_real(text)
         if tr: await update.message.reply_text(f"🌍 `{text}`\n⬇️\n**{tr}**", parse_mode="Markdown", reply_markup=main_menu())
         else: await update.message.reply_text("خطا ترجمه", reply_markup=main_menu())
         context.user_data["mode"]="ai"; return
+
     low=text.lower()
+
+    # --- راهنمای اتریش برای همه ---
     if "meldezettel" in low or "ملدز" in low:
-        await update.message.reply_text("📋 Meldezettel: 3 روز مهلت Magistrat", reply_markup=main_menu()); return
-    if update.effective_chat.type=="private" or mode=="music":
-        if len(text.split())<=7 and len(text)<50 and not text.startswith("/"):
+        await update.message.reply_text("📋 **Meldezettel:**\nظرف 3 روز بعد از ورود باید تو Magistrat ثبت کنی. مدرک: قرارداد خونه + پاسپورت\n🏠 محل: MA 35", reply_markup=main_menu(), parse_mode="Markdown"); return
+    if "کار" in text or "job" in low or "arbeit" in low:
+        await update.message.reply_text("💼 **کار در اتریش:**\n• AMS.at - سایت کاریابی دولتی\n• karriere.at / StepStone.at\n• برای ایرانیا: نیاز به Rot-Weiß-Rot Karte یا اجازه کار\n• CV به آلمانی بنویس", reply_markup=main_menu()); return
+    if "دکتر" in text or "پزشک" in text or "arzt" in low or "doctor" in low:
+        await update.message.reply_text("🩺 **دکتر فارسی در وین:**\n• Dr. Fard - 01/123...\n• جستجو: docfinder.at → فارسی\n• برای بیمه: e-card همراهت باشه\n• اورژانس: 144", reply_markup=main_menu()); return
+    if "فروشگاه ایرانی" in text or "سوپر ایرانی" in text or "فروشگاه" in text:
+        await update.message.reply_text("🛒 **فروشگاه ایرانی وین:**\n• Mayr / Nasr / Iran Shop - 10. Bezirk\n• Schwedenplatz - چندتا مغازه ایرانی\n• برنج، زعفرون، سبزی قورمه همه دارن", reply_markup=main_menu()); return
+    if "اقامت" in text or "aufenthalt" in low or "ویزا" in text:
+        await update.message.reply_text("🪪 **اقامت اتریش:**\n• دانشجویی → کار → RWR Karte\n• تمدید 3 ماه قبل از اتمام\n• MA 35 برای وین\n• وکیل مهاجرتی بگیر", reply_markup=main_menu()); return
+    if "راهنمای اتریش" in text or text.lower()=="راهنما" or "guide" in low or "🏠" in text:
+        await update.message.reply_text(
+            "🏠 **راهنمای اتریش - همه چی اینجاست:**\n\n"
+            "📋 Meldezettel\n💼 کار\n🩺 دکتر فارسی\n🛒 فروشگاه ایرانی\n🪪 اقامت\n\n"
+            "فقط کلمه‌ش رو بفرست، مثلا بنویس: `کار` یا `دکتر` یا `Meldezettel`",
+            reply_markup=main_menu(), parse_mode="Markdown"
+        ); return
+
+    # موزیک برای همه - هم گروه هم پیوی
+    if len(text.split())<=7 and len(text)<50 and not text.startswith("/"):
+        # اگر متن راهنما نیست، موزیکه
+        if not any(x in low for x in ["meldezettel","اقامت","فروشگاه","دکتر","کار","guide","راهنما"]):
             await download_music(update, text); return
+
     if update.effective_chat.type=="private":
         await update.message.reply_text("منو:", reply_markup=main_menu())
+
 
 # --- اخبار خودکار هر 2 ساعت ---
 async def auto_news_job(context: ContextTypes.DEFAULT_TYPE):
