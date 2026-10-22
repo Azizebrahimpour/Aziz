@@ -1,7 +1,8 @@
 python-telegram-bot[job-queue]==21.6
 requests
+feedparser
 yt-dlp
 flask
 pyrogram
-pytgcalls
 tgcrypto
+pytgcalls==3.0.0.dev24

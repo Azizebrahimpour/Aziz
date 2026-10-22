@@ -10,8 +10,8 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 from flask import Flask
 
 TOKEN = os.getenv("TOKEN")
-API_ID = os.getenv("API_ID")
-API_HASH = os.getenv("API_HASH")
+API_ID = os.getenv("API_ID") or "32142474"
+API_HASH = os.getenv("API_HASH") or "df485fa871baea8727242a2d5128f112"
 SESSION_STRING = os.getenv("SESSION_STRING")  # Pyrogram session for userbot
 DATA_FILE = "/tmp/groups.json"
 GROUPS = {}
