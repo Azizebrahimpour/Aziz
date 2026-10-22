@@ -234,21 +234,23 @@ async def settings_cmd(update, context):
 
 
 
-# --- اخبار کامل v11 DIRECT FROM ORF SITE - بدون RSS ---
+
+# --- اخبار کامل v12 با 4 منبع جایگزین ---
 def fetch_rss_titles(url, limit=2):
     try:
         headers={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        # Try rss2json proxy if direct fails
+        # سعی مستقیم
         try:
-            r=requests.get(url, timeout=10, headers=headers)
-            if r.status_code==200 and "<item>" in r.text:
+            r=requests.get(url, timeout=12, headers=headers)
+            if r.status_code==200 and ("<item>" in r.text or "<entry>" in r.text):
                 txt=r.text
             else:
-                raise Exception("direct failed")
-        except:
-            # Use rss2json as fallback
+                raise Exception("direct fail")
+        except Exception as e:
+            # پروکسی rss2json
+            print(f"Trying proxy for {url}: {e}")
             proxy=f"https://api.rss2json.com/v1/api.json?rss_url={requests.utils.quote(url)}"
-            pr=requests.get(proxy, timeout=12, headers=headers)
+            pr=requests.get(proxy, timeout=15, headers=headers)
             if pr.status_code==200:
                 data=pr.json()
                 clean=[]
@@ -259,56 +261,35 @@ def fetch_rss_titles(url, limit=2):
                     if len(title)>10:
                         clean.append((title, link, desc))
                 if clean:
+                    print(f"Proxy success for {url}: {len(clean)} items")
                     return clean
             return []
-        txt=r.text.replace("\n"," ").replace("\r"," ")
+        txt=txt.replace("\n"," ").replace("\r"," ")
         items=re.findall(r"<item>(.*?)</item>", txt, re.DOTALL)[:limit]
+        if not items:
+            items=re.findall(r"<entry>(.*?)</entry>", txt, re.DOTALL)[:limit]
         clean=[]
         for item in items:
             tm=re.search(r"<title>(.*?)</title>", item, re.DOTALL)
             lm=re.search(r"<link>(.*?)</link>", item, re.DOTALL)
+            if not lm:
+                lm=re.search(r'<link[^>]*href="([^"]+)"', item)
             dm=re.search(r"<description>(.*?)</description>", item, re.DOTALL)
+            if not dm:
+                dm=re.search(r"<summary>(.*?)</summary>", item, re.DOTALL)
             if tm:
                 title=re.sub(r"<.*?>","",tm.group(1)).replace("<![CDATA[","").replace("]]>","").replace("&quot;","\"").replace("&amp;","&").strip()[:200]
                 link=re.sub(r"<.*?>","",lm.group(1)).strip().replace("<![CDATA[","").replace("]]>","").strip() if lm else ""
+                if 'href="' in (lm.group(0) if lm else ""):
+                    mhref=re.search(r'href="([^"]+)"', lm.group(0))
+                    if mhref: link=mhref.group(1)
                 desc=re.sub(r"<.*?>","",dm.group(1)).strip()[:500] if dm else ""
                 if len(title)>10:
                     clean.append((title, link, desc))
+        print(f"Direct RSS {url}: {len(clean)} items")
         return clean
     except Exception as e:
         print(f"RSS ERR {url} {e}")
-        return []
-
-def fetch_orf_direct(limit=2):
-    # مستقیم از orf.at صفحه اصلی خبرها رو بکش - بدون RSS
-    try:
-        headers={"User-Agent":"Mozilla/5.0"}
-        r=requests.get("https://orf.at/", timeout=12, headers=headers)
-        html=r.text
-        # پیدا کردن لینک های /stories/
-        links=re.findall(r'href="(https://orf.at/stories/\d+/?)"', html)
-        titles=re.findall(r'<span[^>]*class="[^"]*title[^"]*"[^>]*>(.*?)</span>', html, re.DOTALL)
-        # روش ساده: تمام لینک های stories
-        stories=re.findall(r'https://orf.at/stories/\d+/?', html)
-        uniq=[]
-        for s in stories:
-            if s not in uniq:
-                uniq.append(s)
-            if len(uniq)>=limit:
-                break
-        result=[]
-        for link in uniq[:limit]:
-            # عنوان رو از خود لینک بگیر یا از صفحه
-            try:
-                rr=requests.get(link, timeout=10, headers=headers)
-                h2=re.search(r'<title>(.*?)</title>', rr.text, re.DOTALL)
-                title=re.sub(r"<.*?>","",h2.group(1)).replace(" - news.ORF.at","").strip()[:200] if h2 else "ORF News"
-                result.append((title, link, ""))
-            except:
-                result.append(("ORF News", link, ""))
-        return result
-    except Exception as e:
-        print(f"ORF direct err {e}")
         return []
 
 def fetch_article_text(url, max_chars=900):
@@ -323,10 +304,10 @@ def fetch_article_text(url, max_chars=900):
         texts=[]
         for p in paras[:15]:
             t=re.sub(r"<.*?>","",p).strip()
-            t=t.replace("&nbsp;"," ").replace("&quot;","\"").replace("&amp;","&").replace("&#39;","'").replace("&apos;","'").replace("\u200c"," ")
+            t=t.replace("&nbsp;"," ").replace("&quot;","\"").replace("&amp;","&").replace("&#39;","'").replace("&apos;","'")
             if len(t)<50: continue
             if len(t)>1000: continue
-            if any(x in t.lower() for x in ["teilen","online seit","newsletter","copyright","orf.at","kommentare","datenschutz"]): continue
+            if any(x in t.lower() for x in ["teilen","online seit","newsletter","copyright","kommentare","datenschutz","abonnieren"]): continue
             texts.append(t)
             if len(" ".join(texts))>max_chars: break
         if texts:
@@ -359,23 +340,44 @@ def get_full_news_text():
     txt+="━━━━━━━━━━━━━━━━━━━━\n\n"
     got=False
 
-    # روش 1: RSS با پروکسی
+    # --- اتریش - چند منبع امتحان کن ---
+    austrian_sources=[
+        ("https://rss.orf.at/news.xml", "🇦🇹 ORF اتریش"),
+        ("https://www.derstandard.at/rss", "🇦🇹 Der Standard اتریش"),
+        ("https://api.orf.at/ - fallback", "🇦🇹 ORF"),
+    ]
+    # اول ORF
     orf_news=[]
-    for rss_url in ["https://rss.orf.at/news.xml", "https://rss.orf.at/orf.xml"]:
+    for rss_url in ["https://rss.orf.at/news.xml", "https://rss.orf.at/orf.xml", "https://www.derstandard.at/rss"]:
+        print(f"Trying Austrian RSS: {rss_url}")
         orf_news=fetch_rss_titles(rss_url, limit=2)
         if orf_news:
+            print(f"Got {len(orf_news)} Austrian news from {rss_url}")
             break
 
-    # روش 2: اگر RSS کار نکرد، مستقیم از orf.at
+    # اگر RSS نشد، مستقیم از derstandard.at
     if not orf_news:
-        orf_news=fetch_orf_direct(limit=2)
+        try:
+            print("Trying direct DerStandard")
+            headers={"User-Agent":"Mozilla/5.0"}
+            r=requests.get("https://www.derstandard.at/", timeout=12, headers=headers)
+            stories=re.findall(r'https://www.derstandard.at/story/[^"\']+', r.text)[:2]
+            for link in stories:
+                try:
+                    rr=requests.get(link, timeout=10, headers=headers)
+                    h2=re.search(r'<title>(.*?)</title>', rr.text, re.DOTALL)
+                    title=re.sub(r"<.*?>","",h2.group(1)).strip()[:200] if h2 else "DerStandard News"
+                    orf_news.append((title, link, ""))
+                except: pass
+        except Exception as e:
+            print(f"Direct DerStandard err {e}")
 
     if orf_news:
-        txt+="🇦🇹 **اتریش - ORF:**\n\n"
-        for title, link, summary in orf_news:
+        txt+=f"🇦🇹 **اتریش:**\n\n"
+        for title, link, summary in orf_news[:2]:
             full=fetch_article_text(link, max_chars=700) if link else ""
             if not full: full=summary[:600]
-            fa=translate_de_to_fa(full[:300]) if full else None
+            fa=translate_de_to_fa(full[:300]) if full and ("orf.at" in link or "derstandard" in link) else None
             txt+=f"**{title}**\n\n"
             if full: txt+=f"{full[:700]}...\n\n"
             else: txt+=f"{summary[:500]}...\n\n" if summary else ""
@@ -384,35 +386,61 @@ def get_full_news_text():
             txt+="━━━━━━━━━━━━━━━━━━━━\n\n"
             got=True
 
-    # BBC Persian
-    try:
-        bbc=fetch_rss_titles("https://feeds.bbci.co.uk/persian/rss.xml", limit=2)
-        if not bbc:
-            # fallback BBC direct
-            bbc=[("BBC فارسی","https://www.bbc.com/persian","")]
-        if bbc:
-            txt+="🇮🇷 **ایران/جهان - BBC فارسی:**\n\n"
-            for title, link, summary in bbc[:2]:
-                full=fetch_article_text(link, max_chars=700) if link and "bbc.com" in link else ""
-                if not full: full=summary[:700] if summary else "برای خواندن کامل خبر روی لینک بزنید"
-                txt+=f"**{title}**\n\n"
-                if full: txt+=f"{full[:700]}...\n\n"
-                if link: txt+=f"🔗 {link}\n"
-                txt+="━━━━━━━━━━━━━━━━━━━━\n\n"
-                got=True
-    except Exception as e:
-        print(f"BBC err {e}")
+    # --- ایران/جهان - BBC Persian ---
+    bbc_sources=[
+        "https://feeds.bbci.co.uk/persian/rss.xml",
+        "https://www.bbc.com/persian/index.xml",
+    ]
+    bbc_news=[]
+    for rss_url in bbc_sources:
+        bbc_news=fetch_rss_titles(rss_url, limit=2)
+        if bbc_news:
+            break
+
+    if bbc_news:
+        txt+="🇮🇷 **ایران/جهان - BBC فارسی:**\n\n"
+        for title, link, summary in bbc_news[:2]:
+            full=fetch_article_text(link, max_chars=700) if link else ""
+            if not full: full=summary[:700] if summary else ""
+            txt+=f"**{title}**\n\n"
+            if full: txt+=f"{full[:700]}...\n\n"
+            if link: txt+=f"🔗 {link}\n"
+            txt+="━━━━━━━━━━━━━━━━━━━━\n\n"
+            got=True
+    else:
+        # BBC fallback مستقیم
+        try:
+            print("BBC RSS failed, trying direct BBC Persian page")
+            headers={"User-Agent":"Mozilla/5.0"}
+            r=requests.get("https://www.bbc.com/persian", timeout=12, headers=headers)
+            links=re.findall(r'https://www.bbc.com/persian/articles/[^"\']+', r.text)[:2]
+            for link in links:
+                try:
+                    rr=requests.get(link, timeout=10, headers=headers)
+                    h2=re.search(r'<title>(.*?)</title>', rr.text, re.DOTALL)
+                    title=re.sub(r"<.*?>","",h2.group(1)).strip()[:200] if h2 else "BBC Persian"
+                    full=fetch_article_text(link, max_chars=700)
+                    txt+=f"**{title}**\n\n"
+                    if full: txt+=f"{full[:700]}...\n\n"
+                    txt+=f"🔗 {link}\n"
+                    txt+="━━━━━━━━━━━━━━━━━━━━\n\n"
+                    got=True
+                except: pass
+        except Exception as e:
+            print(f"BBC direct err {e}")
 
     if not got:
-        # آخرین تلاش - حتی اگر هیچی نشد، یه خبر ساختگی نده، بگو سرویس موقتا قطعه ولی لینک بده
-        txt+="🇦🇹 **ORF - بروزترین خبرها:**\n"
-        txt+="https://orf.at/\n\n"
-        txt+="🇮🇷 **BBC فارسی:**\nhttps://www.bbc.com/persian\n\n"
-        txt+="⚠️ سرور RSS موقتا در دسترس نیست، لطفا 10 دقیقه بعد /news بزنید\n\n"
+        txt+="⚠️ سرور اخبار موقتا شلوغه\n"
+        txt+="🇦🇹 ORF: https://orf.at/\n"
+        txt+="🇮🇷 BBC: https://www.bbc.com/persian\n\n"
+        txt+="لطفا 5 دقیقه بعد دوباره /news بزنید - در حال تلاش مجدد...\n\n"
+        # لاگ برای دیباگ
+        print("NO NEWS GOT - all sources failed")
 
     txt+=f"🕐 {datetime.now().strftime('%H:%M')} وین | هر 4 ساعت بروز\n"
     txt+="📸 @Iraniane_moghime_Otrish_bot"
     if len(txt)>4000: txt=txt[:3900]+"\n..."
+    print(f"Final news text length: {len(txt)}, got={got}")
     return txt
 
 
