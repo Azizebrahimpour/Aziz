@@ -1,0 +1,7 @@
+python-telegram-bot[job-queue]==21.6
+requests
+feedparser
+yt-dlp
+flask
+pyrogram
+tgcrypto
