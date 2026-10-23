@@ -1,73 +1,72 @@
 
-# v17 FINAL - Force Live - 2025
-import os, requests
+# v18 FIXED - No drop, always answer
+import os, sys
+import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 from flask import Flask
 import threading
 
-TOKEN = os.getenv("TOKEN") or "5146516008:AAG6jOVffT2Yt8moF2KMFcdDXK8EYbMVMxQ"
-print(f"BOT v17 starting TOKEN {TOKEN[:8]}...")
+TOKEN = os.getenv("TOKEN")
+if not TOKEN:
+    TOKEN = "5146516008:AAG6jOVffT2Yt8moF2KMFcdDXK8EYbMVMxQ"
+    print("WARNING: TOKEN env not set, using fallback")
+
+print(f"=== BOT v18 START ===")
+print(f"TOKEN: {TOKEN[:15]}... len={len(TOKEN)}")
 
 def main_menu():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📺 TV لایو", callback_data="tv"), InlineKeyboardButton("💶 قیمت ارز", callback_data="price")],
-        [InlineKeyboardButton("📰 اخبار", callback_data="news"), InlineKeyboardButton("🌤️ هوای وین", callback_data="weather")],
-        [InlineKeyboardButton("🎵 آهنگ", callback_data="music"), InlineKeyboardButton("⚙️ تنظیمات", callback_data="settings")],
+        [InlineKeyboardButton("📺 TV لایو", callback_data="tv"), InlineKeyboardButton("💶 قیمت", callback_data="price")],
+        [InlineKeyboardButton("📰 اخبار", callback_data="news"), InlineKeyboardButton("🌤️ هوا", callback_data="weather")],
     ])
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = "سلام عزیز 👋\n\n✅ ربات v17 روشن شد!\n\n📺 /tv - تلویزیون\n💶 /price - قیمت ارز\n📰 /news - اخبار\n\nهمه چیز کار میکنه!"
-    await update.message.reply_text(text, reply_markup=main_menu())
+    print(f"START received from {update.effective_user.id}")
+    await update.message.reply_text("سلام عزیز 👋\n✅ ربات v18 روشن شد! کار میکنه!\n\n/tv /price /news", reply_markup=main_menu())
 
 async def tv_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = update.message or (update.callback_query.message if update.callback_query else None)
-    txt = """📺 **TV لایو**
-
-🇺🇸 VOA: https://ir.voanews.com/
-📺 ایران اینترنشنال: https://www.iranintl.com/live
-💎 GEM: https://gemtv.com/
-🎵 رادیو جوان: https://www.radiojavan.com/"""
+    txt = "📺 TV:\nVOA: https://ir.voanews.com/\nIranIntl: https://www.iranintl.com/live"
     if update.callback_query:
-        await update.callback_query.edit_message_text(txt, parse_mode="Markdown", reply_markup=main_menu())
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_text(txt, reply_markup=main_menu())
     else:
-        await update.message.reply_text(txt, parse_mode="Markdown", reply_markup=main_menu())
+        await update.message.reply_text(txt, reply_markup=main_menu())
 
 async def price_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    txt = "💶 قیمت امروز:\nEUR/USD ~1.08\nمنبع: exchangerate-api"
+    txt = "💶 قیمت امروز: EUR/USD 1.08"
     if update.callback_query:
+        await update.callback_query.answer()
         await update.callback_query.edit_message_text(txt, reply_markup=main_menu())
     else:
         await update.message.reply_text(txt, reply_markup=main_menu())
 
 async def news_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    txt = "📰 اخبار کامل: https://www.bbc.com/persian"
+    txt = "📰 https://www.bbc.com/persian"
     if update.callback_query:
+        await update.callback_query.answer()
         await update.callback_query.edit_message_text(txt, reply_markup=main_menu())
     else:
         await update.message.reply_text(txt, reply_markup=main_menu())
 
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
+    print(f"Button {q.data}")
     await q.answer()
     if q.data == "tv": await tv_cmd(update, context)
     elif q.data == "price": await price_cmd(update, context)
     elif q.data == "news": await news_cmd(update, context)
-    elif q.data == "weather": await q.edit_message_text("🌤️ هوای وین: فردا آفتابی ☀️ 15°C", reply_markup=main_menu())
-    elif q.data == "music": await q.edit_message_text("🎵 اسم آهنگ رو بفرست!", reply_markup=main_menu())
-    elif q.data == "settings": await q.edit_message_text("⚙️ تنظیمات: بزودی...", reply_markup=main_menu())
+    elif q.data == "weather": await q.edit_message_text("🌤️ وین فردا 15°C آفتابی", reply_markup=main_menu())
 
-async def handle_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def any_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
-    txt = update.message.text.lower()
-    if "/start" in txt: await start(update, context)
-    elif "tv" in txt or "تلویزیون" in txt: await tv_cmd(update, context)
-    elif "قیمت" in txt or "price" in txt: await price_cmd(update, context)
-    else: await update.message.reply_text("منو:", reply_markup=main_menu())
+    print(f"MSG: {update.message.text} from {update.effective_user.id} chat={update.effective_chat.type}")
+    # Always answer
+    await update.message.reply_text(f"پیامت رو گرفتم: {update.message.text}\n\nمنو:", reply_markup=main_menu())
 
 flask_app = Flask(__name__)
 @flask_app.route('/')
-def home(): return "🤖 Bot v17 Live - Aziz - FORCE DEPLOY"
+def home(): return "BOT v18 Live - Working - Aziz"
 @flask_app.route('/ping')
 def ping(): return "pong"
 def run_flask():
@@ -76,15 +75,23 @@ def run_flask():
 
 def main():
     threading.Thread(target=run_flask, daemon=True).start()
-    app = Application.builder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("tv", tv_cmd))
-    app.add_handler(CommandHandler("price", price_cmd))
-    app.add_handler(CommandHandler("news", news_cmd))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(MessageHandler(filters.TEXT, handle_msg))
-    print("✅ v17 Live - Ready!")
-    app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
+    try:
+        app = Application.builder().token(TOKEN).build()
+        app.add_handler(CommandHandler("start", start))
+        app.add_handler(CommandHandler("tv", tv_cmd))
+        app.add_handler(CommandHandler("price", price_cmd))
+        app.add_handler(CommandHandler("news", news_cmd))
+        app.add_handler(CallbackQueryHandler(buttons))
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, any_msg))
+        # IMPORTANT: drop_pending_updates=False so old /start not lost
+        print("Starting polling with drop_pending=False")
+        app.run_polling(drop_pending_updates=False, allowed_updates=Update.ALL_TYPES, close_loop=False)
+    except Exception as e:
+        print(f"FATAL ERROR: {e}", file=sys.stderr)
+        import traceback; traceback.print_exc()
+        # Keep flask alive
+        while True:
+            import time; time.sleep(60)
 
 if __name__ == "__main__":
     main()
