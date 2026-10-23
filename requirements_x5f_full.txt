@@ -1,7 +1,0 @@
-python-telegram-bot==21.6
-requests
-flask
-pyrogram
-tgcrypto
-yt-dlp
-pytgcalls==3.0.0.dev24
