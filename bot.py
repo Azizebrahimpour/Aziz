@@ -1,18 +1,12 @@
 
-import os, sys, time
-print("=== BOT v20 ULTRA SIMPLE ===", flush=True)
+import os, sys, time, logging, asyncio
+logging.basicConfig(level=logging.INFO)
 
-TOKEN = os.getenv("TOKEN", "")
-print(f"RAW len={len(TOKEN)}", flush=True)
-# Clean aggressively
-TOKEN = TOKEN.strip().replace("\n","").replace("\r","").replace(" ","").replace("\t","").replace("\n","").replace("\r","")
-# Remove possible zero width
-TOKEN = TOKEN.replace(chr(8203),"").replace(chr(160),"")
-print(f"CLEAN len={len(TOKEN)} start={TOKEN[:15]}...", flush=True)
-
+print("=== BOT v21 FIX POLLING ===", flush=True)
+TOKEN = os.getenv("TOKEN","").strip().replace("\n","").replace("\r","").replace(" ","")
 if not TOKEN or len(TOKEN)<20:
-    TOKEN = "5146516008:AAFB1jSdDWxEmnotp_sh4G1g2WgIxpwNOXY"
-    print(f"Using fallback TOKEN len={len(TOKEN)}", flush=True)
+    TOKEN = "5146516008:AAFB1jSdDWxEmnotp_sh4G1g2WglxpwNOXY"
+print(f"TOKEN len={len(TOKEN)} ok", flush=True)
 
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -22,35 +16,55 @@ import threading
 flask_app = Flask(__name__)
 @flask_app.route('/')
 def home():
-    return f"BOT v20 LIVE - TOKEN len={len(TOKEN)} OK"
+    return f"BOT v21 LIVE - len={len(TOKEN)} - Polling Active"
+
+@flask_app.route('/ping')
+def ping():
+    return "pong"
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
-    print(f"Flask starting on {port}", flush=True)
-    flask_app.run(host="0.0.0.0", port=port, use_reloader=False)
+    flask_app.run(host="0.0.0.0", port=port, use_reloader=False, threaded=True)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print(f">>> /start from {update.effective_user.id}", flush=True)
-    await update.message.reply_text("✅✅✅ عزیز کار کرد! v20 روشنه!\n\n/tv بزن")
+    print(f">>> START {update.effective_user.id} {update.effective_chat.type}", flush=True)
+    try:
+        await update.message.reply_text("✅✅✅ عزیز کار کرد! v21 روشنه! بالاخره!\n\n/tv بزن")
+        print(">>> Replied to /start", flush=True)
+    except Exception as e:
+        print(f"Reply error {e}", flush=True)
+
+async def post_init(app):
+    # Delete webhook on startup
+    try:
+        await app.bot.delete_webhook(drop_pending_updates=True)
+        print("Webhook deleted in post_init", flush=True)
+    except Exception as e:
+        print(f"delete_webhook error {e}", flush=True)
 
 def main():
-    # Start flask in thread
     threading.Thread(target=run_flask, daemon=True).start()
-    time.sleep(1)
-    print("Building Application...", flush=True)
-    try:
-        app = Application.builder().token(TOKEN).build()
-        app.add_handler(CommandHandler("start", start))
-        print("Starting polling NO DROP...", flush=True)
-        # No drop, no close_loop
-        app.run_polling(drop_pending_updates=False, allowed_updates=Update.ALL_TYPES)
-    except Exception as e:
-        print(f"!!! FATAL POLLING ERROR: {e}", flush=True)
-        import traceback
-        traceback.print_exc()
-        print("Keeping Flask alive despite error", flush=True)
-        while True:
-            time.sleep(60)
+    time.sleep(2)
+    print("Building app v21...", flush=True)
+    while True:
+        try:
+            async def run():
+                app = Application.builder().token(TOKEN).post_init(post_init).build()
+                app.add_handler(CommandHandler("start", start))
+                print("Starting polling v21...", flush=True)
+                await app.initialize()
+                await app.start()
+                await app.updater.start_polling(drop_pending_updates=False, allowed_updates=Update.ALL_TYPES)
+                print("Polling started! Waiting forever...", flush=True)
+                # Keep alive
+                while True:
+                    await asyncio.sleep(3600)
+            asyncio.run(run())
+        except Exception as e:
+            print(f"!!! FATAL LOOP {e}", flush=True)
+            import traceback; traceback.print_exc()
+            print("Retrying in 10 sec...", flush=True)
+            time.sleep(10)
 
 if __name__ == "__main__":
     main()
