@@ -588,6 +588,11 @@ def main():
     # Init voice
     init_voice_client()
     threading.Thread(target=run_flask, daemon=True).start()
+    if not TOKEN:
+        print("ERROR: TOKEN not set! Set TOKEN env var in Render")
+        # Keep flask alive to avoid crash loop
+        while True:
+            import time; time.sleep(60)
     app=Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_cmd))
